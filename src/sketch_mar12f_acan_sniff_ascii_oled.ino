@@ -36,9 +36,9 @@ enum DisplayArea
 //     In case you see success up to "Sent: 17" and from then on "Send failure":
 //        There is a problem with the interrupt. Check if correct pin is configured
 // ——————————————————————————————————————————————————————————————————————————————
-constexpr byte CAN_BIT_RATE = 125; // 125 kbps
-constexpr byte MCP2515_CS = 10;    // CS input of MCP2515 (adapt to your design)
-constexpr byte MCP2515_INT = 2;    // INT output of MCP2515 (adapt to your design)
+constexpr uint32_t CAN_BIT_RATE = 125; // 125 kbps
+constexpr byte MCP2515_CS = 10;        // CS input of MCP2515 (adapt to your design)
+constexpr byte MCP2515_INT = 2;        // INT output of MCP2515 (adapt to your design)
 ACAN2515 can(MCP2515_CS, SPI, MCP2515_INT);
 constexpr uint32_t QUARTZ_FREQUENCY = 8UL * 1000UL * 1000UL; // 8 MHz
 
@@ -86,10 +86,12 @@ bool somethingChangedThatAffectsMemory()
 void handleReceivedMessage(const CANMessage &message)
 {
   digitalWrite(LED_BLUE, HIGH);
-  displayASCII("ID Ox" + String(message.id, HEX), MAIN_AREA);
+  char mIdBuff[10];
+  sprintf(mIdBuff, "ID Ox%x", message.id);
 
-  Serial.print("ID: ");
-  Serial.print(message.id, HEX);
+  displayASCII(mIdBuff, MAIN_AREA);
+
+  Serial.print(mIdBuff);
   Serial.print(", Length: ");
   Serial.print(message.len);
   Serial.print(", Data: ");
