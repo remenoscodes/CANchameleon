@@ -90,7 +90,7 @@ void loop()
   // Group selection
   if (digitalRead(GROUP_1_BUTTON_PIN) == LOW && (millis() - lastDebounceTime1) > debounceDelay)
   {
-    selectedGroup = 0; // Select group 0
+    selectedGroup = selectedGroup == GROUP_1 ? NO_GROUP : 0;
     lastDebounceTime1 = millis();
     printSerial("Group selected", 0);
     displayCurrentGroup();
@@ -98,7 +98,7 @@ void loop()
 
   if (digitalRead(GROUP_2_BUTTON_PIN) == LOW && (millis() - lastDebounceTime2) > debounceDelay)
   {
-    selectedGroup = 1; // Select group 1
+    selectedGroup = selectedGroup == GROUP_2 ? NO_GROUP : 1; // Select group 1
     lastDebounceTime2 = millis();
     printSerial("Group selected", 1);
     displayCurrentGroup();
