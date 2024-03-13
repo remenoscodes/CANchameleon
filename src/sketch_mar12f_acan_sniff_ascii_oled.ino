@@ -47,6 +47,22 @@ constexpr int LED_YELLOW = 7; // Yellow LED pin
 
 // ——————————————————————————————————————————————————————————————————————————————
 
+#define MAX_CAN_IDS (0 / sizeof(uint32_t))
+uint32_t uniqueIDs[MAX_CAN_IDS];
+uint8_t numUniqueIDs = 0;
+
+#define MEMORY_LIMIT 150                 // Total available memory for bitmap
+#define CAN_ID_LIMIT (MEMORY_LIMIT * 8)  // Maximum number of CAN IDs that can be tracked
+uint8_t canIdBitmap[MEMORY_LIMIT] = {0}; // Bitmap for the active group
+bool selectedGroup = -1;                 // false for group 1, true for group 2
+
+#define NO_GROUP -1
+#define GROUP_1 0
+#define GROUP_2 1
+
+#define GROUP_1_BUTTON_PIN 8 // Button to select group 1
+#define GROUP_2_BUTTON_PIN 9 // Button to select group 2
+
 void setup()
 {
   startSerial();
@@ -63,11 +79,32 @@ void setup()
 
 void loop()
 {
+  static unsigned long lastDebounceTime1 = 0;
+  static unsigned long lastDebounceTime2 = 0;
+  unsigned long debounceDelay = 50; // Debounce delay in milliseconds
+
+  // Group selection
+  if (digitalRead(GROUP_1_BUTTON_PIN) == LOW && (millis() - lastDebounceTime1) > debounceDelay)
+  {
+    selectedGroup = 0; // Select group 0
+    lastDebounceTime1 = millis();
+    printSerial("Group selected", 0);
+  }
+
+  if (digitalRead(GROUP_2_BUTTON_PIN) == LOW && (millis() - lastDebounceTime2) > debounceDelay)
+  {
+    selectedGroup = 1; // Select group 1
+    lastDebounceTime2 = millis();
+    printSerial("Group selected", 1);
+  }
+
   CANMessage message;
   if (can.available())
   {
     if (can.receive(message))
     {
+      setCanId(message.id);
+      //   storeUniqueID(message.id);
       handleReceivedMessage(message);
     }
   }
@@ -83,23 +120,82 @@ bool somethingChangedThatAffectsMemory()
   return true;
 }
 
+void setCanId(uint16_t canId)
+{
+  if (selectedGroup == NO_GROUP)
+  {
+    return;
+  }
+
+  uint16_t rangeStart = selectedGroup == GROUP_1 ? 0 : 1024;
+  uint16_t rangeEnd = selectedGroup == GROUP_1 ? 1023 : 2047;
+  if (canId >= rangeStart && canId <= rangeEnd)
+  {
+    uint16_t adjustedId = canId - rangeStart; // Adjust CAN ID to start from 0 within each group
+    canIdBitmap[adjustedId / 8] |= (1 << (adjustedId % 8));
+  }
+}
+
+bool isCanIdSet(uint16_t canId)
+{
+  if (selectedGroup == NO_GROUP)
+  {
+    return true;
+  }
+
+  uint16_t rangeStart = selectedGroup == GROUP_1 ? 0 : 1024;
+  uint16_t rangeEnd = selectedGroup == GROUP_1 ? 1023 : 2047;
+  if (canId >= rangeStart && canId <= rangeEnd)
+  {
+    uint16_t adjustedId = canId - rangeStart; // Adjust CAN ID to start from 0 within each group
+    return canIdBitmap[adjustedId / 8] & (1 << (adjustedId % 8));
+  }
+  return false;
+}
+
+void storeUniqueID(uint32_t id)
+{
+  if (numUniqueIDs >= MAX_CAN_IDS)
+  {
+    printSerial("Max unique IDs reached: ", numUniqueIDs);
+    return;
+  }
+
+  for (uint8_t i = 0; i < numUniqueIDs; i++)
+  {
+    if (uniqueIDs[i] == id)
+    {
+      // ID already exists.
+      return;
+    }
+  }
+
+  // If we're here, it means id doesn't exist and we haven't reached max capacity.
+  uniqueIDs[numUniqueIDs] = id;
+  numUniqueIDs++;
+
+  printSerial("CAN ID Stored: ", id);
+  printSerial("CAN IDs Count: ", numUniqueIDs);
+}
+
 void handleReceivedMessage(const CANMessage &message)
 {
   digitalWrite(LED_BLUE, HIGH);
+
   char mIdBuff[10];
   sprintf(mIdBuff, "ID Ox%x", message.id);
 
   displayASCII(mIdBuff, MAIN_AREA);
 
   Serial.print(mIdBuff);
-  Serial.print(", Length: ");
-  Serial.print(message.len);
-  Serial.print(", Data: ");
-  for (int i = 0; i < message.len; i++)
-  {
-    Serial.print(message.data[i], HEX);
-    Serial.print(" ");
-  }
+  // Serial.print(", Length: ");
+  // Serial.print(message.len);
+  // Serial.print(", Data: ");
+  // for (int i = 0; i < message.len; i++)
+  // {
+  //   Serial.print(message.data[i], HEX);
+  //   Serial.print(" ");
+  // }
   Serial.println();
 
   digitalWrite(LED_BLUE, LOW);
@@ -111,6 +207,9 @@ void initializeGPIOs()
   digitalWrite(LED_BUILTIN, HIGH);
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_YELLOW, OUTPUT);
+
+  pinMode(GROUP_1_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(GROUP_2_BUTTON_PIN, INPUT_PULLUP);
 }
 
 void startSerial()
@@ -216,6 +315,7 @@ void updateFooterWithFreeMem()
   int freeMem = availableMemory();
   snprintf(footerText, sizeof(footerText), "Free Mem: %d ", freeMem);
   displayASCII(footerText, FOOTER_AREA); // Print to footer area
+  printSerial("Free Mem: ", freeMem);
 }
 
 void setupASCII()
