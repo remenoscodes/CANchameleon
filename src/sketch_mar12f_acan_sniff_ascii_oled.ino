@@ -16,6 +16,9 @@ enum DisplayArea
 {
   HEADER_AREA,
   MAIN_AREA,
+  MAIN_AREA1,
+  MAIN_AREA2,
+  MAIN_AREA3,
   FOOTER_AREA
 };
 
@@ -54,7 +57,7 @@ uint8_t numUniqueIDs = 0;
 #define MEMORY_LIMIT 150                 // Total available memory for bitmap
 #define CAN_ID_LIMIT (MEMORY_LIMIT * 8)  // Maximum number of CAN IDs that can be tracked
 uint8_t canIdBitmap[MEMORY_LIMIT] = {0}; // Bitmap for the active group
-bool selectedGroup = -1;                 // false for group 1, true for group 2
+uint8_t selectedGroup = -1;              // false for group 1, true for group 2
 
 #define NO_GROUP -1
 #define GROUP_1 0
@@ -75,6 +78,7 @@ void setup()
   initializeCAN();
   printAvailableMem();
   updateFooterWithFreeMem();
+  displayCurrentGroup();
 }
 
 void loop()
@@ -89,6 +93,7 @@ void loop()
     selectedGroup = 0; // Select group 0
     lastDebounceTime1 = millis();
     printSerial("Group selected", 0);
+    displayCurrentGroup();
   }
 
   if (digitalRead(GROUP_2_BUTTON_PIN) == LOW && (millis() - lastDebounceTime2) > debounceDelay)
@@ -96,6 +101,7 @@ void loop()
     selectedGroup = 1; // Select group 1
     lastDebounceTime2 = millis();
     printSerial("Group selected", 1);
+    displayCurrentGroup();
   }
 
   CANMessage message;
@@ -118,6 +124,22 @@ void loop()
 bool somethingChangedThatAffectsMemory()
 {
   return true;
+}
+
+void displayCurrentGroup()
+{
+  if (selectedGroup == GROUP_1)
+  {
+    displayASCII("GROUP 1: 0 -> 1023", MAIN_AREA);
+  }
+  else if (selectedGroup == GROUP_2)
+  {
+    displayASCII("GROUP 2: 1024 -> 2047", MAIN_AREA);
+  }
+  else
+  {
+    displayASCII("NO GROUP", MAIN_AREA);
+  }
 }
 
 void setCanId(uint16_t canId)
@@ -185,7 +207,7 @@ void handleReceivedMessage(const CANMessage &message)
   char mIdBuff[10];
   sprintf(mIdBuff, "ID Ox%x", message.id);
 
-  displayASCII(mIdBuff, MAIN_AREA);
+  displayASCII(mIdBuff, MAIN_AREA1);
 
   Serial.print(mIdBuff);
   // Serial.print(", Length: ");
@@ -354,7 +376,40 @@ void displayASCII(const String &text, DisplayArea area)
     // Calculate previous text length in pixels for main area
     // previousTextLengthPixels = mainAreaText.length() * charWidthIncludingSpace;
     // Set cursor to start position of main area
+    ascii.setCursor(0, 2); // Assuming row 4 for main area, adjust if needed
+    ascii.clearToEOL();    // Clear the line
+    // Optionally, clear more based on previous text length if necessary
+    // This is a placeholder, actual clearing might need custom implementation
+    // mainAreaText = text; // Update stored main text
+    ascii.println(text); // Print new text
+    break;
+  case MAIN_AREA1:
+    // Calculate previous text length in pixels for main area
+    // previousTextLengthPixels = mainAreaText.length() * charWidthIncludingSpace;
+    // Set cursor to start position of main area
+    ascii.setCursor(0, 3); // Assuming row 4 for main area, adjust if needed
+    ascii.clearToEOL();    // Clear the line
+    // Optionally, clear more based on previous text length if necessary
+    // This is a placeholder, actual clearing might need custom implementation
+    // mainAreaText = text; // Update stored main text
+    ascii.println(text); // Print new text
+    break;
+  case MAIN_AREA2:
+    // Calculate previous text length in pixels for main area
+    // previousTextLengthPixels = mainAreaText.length() * charWidthIncludingSpace;
+    // Set cursor to start position of main area
     ascii.setCursor(0, 4); // Assuming row 4 for main area, adjust if needed
+    ascii.clearToEOL();    // Clear the line
+    // Optionally, clear more based on previous text length if necessary
+    // This is a placeholder, actual clearing might need custom implementation
+    // mainAreaText = text; // Update stored main text
+    ascii.println(text); // Print new text
+    break;
+  case MAIN_AREA3:
+    // Calculate previous text length in pixels for main area
+    // previousTextLengthPixels = mainAreaText.length() * charWidthIncludingSpace;
+    // Set cursor to start position of main area
+    ascii.setCursor(0, 5); // Assuming row 4 for main area, adjust if needed
     ascii.clearToEOL();    // Clear the line
     // Optionally, clear more based on previous text length if necessary
     // This is a placeholder, actual clearing might need custom implementation
