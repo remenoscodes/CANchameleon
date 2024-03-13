@@ -4,26 +4,20 @@
 #include <Wire.h>
 #include <SSD1306Ascii.h>
 #include <SSD1306AsciiWire.h>
+#include <ACAN2515.h>
+#include <SPI.h>
 
 #define SCREEN_WIDTH 128    // OLED display width, in pixels
 #define SCREEN_HEIGHT 64    // OLED display height, in pixels
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 
 SSD1306AsciiWire ascii;
-
 enum DisplayArea
 {
   HEADER_AREA,
   MAIN_AREA,
   FOOTER_AREA
 };
-
-// ——————————————————————————————————————————————————————————————————————————————
-//   ACAN2515 Demo in loopback mode
-// ——————————————————————————————————————————————————————————————————————————————
-
-#include <ACAN2515.h>
-#include <SPI.h>
 
 // ——————————————————————————————————————————————————————————————————————————————
 //   MCP2515 connections:
@@ -42,92 +36,46 @@ enum DisplayArea
 //     In case you see success up to "Sent: 17" and from then on "Send failure":
 //        There is a problem with the interrupt. Check if correct pin is configured
 // ——————————————————————————————————————————————————————————————————————————————
-
-static const byte MCP2515_CS = 10; // CS input of MCP2515 (adapt to your design)
-static const byte MCP2515_INT = 2; // INT output of MCP2515 (adapt to your design)
-
-// ——————————————————————————————————————————————————————————————————————————————
-//   MCP2515 Driver object
-// ——————————————————————————————————————————————————————————————————————————————
-
+constexpr byte CAN_BIT_RATE = 125; // 125 kbps
+constexpr byte MCP2515_CS = 10;    // CS input of MCP2515 (adapt to your design)
+constexpr byte MCP2515_INT = 2;    // INT output of MCP2515 (adapt to your design)
 ACAN2515 can(MCP2515_CS, SPI, MCP2515_INT);
+constexpr uint32_t QUARTZ_FREQUENCY = 8UL * 1000UL * 1000UL; // 8 MHz
 
-// ——————————————————————————————————————————————————————————————————————————————
-//   MCP2515 Quartz: adapt to your design
-// ——————————————————————————————————————————————————————————————————————————————
-
-static const uint32_t QUARTZ_FREQUENCY = 8UL * 1000UL * 1000UL; // 16 MHz
-
-// ——————————————————————————————————————————————————————————————————————————————
-//    SETUP
-// ——————————————————————————————————————————————————————————————————————————————
-
-//----------------------------------------------------------------------------------------------------------------------
-
-static uint32_t gBlinkLedDate = 0;
-static uint32_t gReceivedFrameCount = 0;
-static uint32_t gSentFrameCount = 0;
+constexpr int LED_BLUE = 4;   // Blue LED pin
+constexpr int LED_YELLOW = 7; // Yellow LED pin
 
 // ——————————————————————————————————————————————————————————————————————————————
 
 void setup()
 {
-  //--- Start serial
   startSerial();
-
   SPI.begin();
-
-  Serial.println("BEFORE PINs");
   printAvailableMem();
-
   initializeGPIOs();
-
-  Serial.println("BEFORE ASCII");
   printAvailableMem();
   setupASCII();
-
-  Serial.println("BEFORE ACAN");
   printAvailableMem();
   initializeCAN();
-
-  Serial.println("AFTER ACAN ASCII");
   printAvailableMem();
   updateFooterWithFreeMem();
 }
 
 void loop()
 {
-  if (somethingChangedThatAffectsMemory())
-  {
-    updateFooterWithFreeMem();
-  }
-
   CANMessage message;
   if (can.available())
   {
     if (can.receive(message))
     {
-      // Example: Light up the LED if any message is received
-      digitalWrite(4, HIGH); // Assuming LED is connected to pin 4
-      displayASCII("ID Ox" + String(message.id, HEX), MAIN_AREA);
-
-      // Process the received message
-      Serial.print("ID: ");
-      Serial.print(message.id, HEX);
-      Serial.print(", Length: ");
-      Serial.print(message.len);
-      Serial.print(", Data: ");
-      for (int i = 0; i < message.len; i++)
-      {
-        Serial.print(message.data[i], HEX);
-        Serial.print(" ");
-      }
-      Serial.println();
-      delay(100); // Short visible delay
-      digitalWrite(4, LOW);
+      handleReceivedMessage(message);
     }
   }
-  // updateFooterWithFreeMem();
+
+  if (somethingChangedThatAffectsMemory())
+  {
+    updateFooterWithFreeMem();
+  }
 }
 
 bool somethingChangedThatAffectsMemory()
@@ -135,13 +83,32 @@ bool somethingChangedThatAffectsMemory()
   return true;
 }
 
+void handleReceivedMessage(const CANMessage &message)
+{
+  digitalWrite(LED_BLUE, HIGH);
+  displayASCII("ID Ox" + String(message.id, HEX), MAIN_AREA);
+
+  Serial.print("ID: ");
+  Serial.print(message.id, HEX);
+  Serial.print(", Length: ");
+  Serial.print(message.len);
+  Serial.print(", Data: ");
+  for (int i = 0; i < message.len; i++)
+  {
+    Serial.print(message.data[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+
+  digitalWrite(LED_BLUE, LOW);
+}
+
 void initializeGPIOs()
 {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-
-  pinMode(4, OUTPUT); // Blue LED
-  pinMode(7, OUTPUT); // Red LED
+  pinMode(LED_BLUE, OUTPUT);
+  pinMode(LED_YELLOW, OUTPUT);
 }
 
 void startSerial()
@@ -158,7 +125,6 @@ void toggleBuiltinLED()
 {
   static unsigned long lastToggleTimestamp = 0;
   const long interval = 100; // Interval at which to blink (milliseconds)
-
   unsigned long currentMillis = millis();
   if (currentMillis - lastToggleTimestamp >= interval)
   {
@@ -171,51 +137,24 @@ void initializeCAN()
 {
   displayASCII(F("CAN Sniffer"), HEADER_AREA);
   displayASCII(F("ACAN2515 SETUP"), MAIN_AREA);
-  Serial.println("SETUP ACAN2515");
 
   // CAN bitrate 500 kb/s worked -> ELANTRA, TUCSON
   // ACAN2515Settings settings(QUARTZ_FREQUENCY, 500UL * 1000UL);
   // Rede Peer 2 Peer Arduino
-  ACAN2515Settings settings(QUARTZ_FREQUENCY, 125 * 1000UL); // CAN bit rate 125 kb/s //Worked on TUCSON
-  settings.mRequestedMode = ACAN2515Settings::NormalMode;    // Select mode
+  ACAN2515Settings settings(QUARTZ_FREQUENCY, CAN_BIT_RATE * 1000UL); // CAN bit rate 125 kb/s //Worked on TUCSON
+  settings.mRequestedMode = ACAN2515Settings::NormalMode;             // Select mode
   const uint16_t errorCode = can.begin(settings, []
                                        { can.isr(); });
 
   if (errorCode == 0)
   {
-    digitalWrite(7, HIGH);
-    Serial.print("Bit Rate prescaler: ");
-    Serial.println(settings.mBitRatePrescaler);
-    Serial.print("Propagation Segment: ");
-    Serial.println(settings.mPropagationSegment);
-    Serial.print("Phase segment 1: ");
-    Serial.println(settings.mPhaseSegment1);
-    Serial.print("Phase segment 2: ");
-    Serial.println(settings.mPhaseSegment2);
-    Serial.print("SJW: ");
-    Serial.println(settings.mSJW);
-    Serial.print("Triple Sampling: ");
-    Serial.println(settings.mTripleSampling ? "yes" : "no");
-    Serial.print("Actual bit rate: ");
-    Serial.print(settings.actualBitRate());
-    Serial.println(" bit/s");
-    Serial.print("Exact bit rate ? ");
-    Serial.println(settings.exactBitRate() ? "yes" : "no");
-    Serial.print("Sample point: ");
-    Serial.print(settings.samplePointFromBitStart());
-    Serial.println("%");
-
-    displayASCII("DONE", MAIN_AREA);
-    displayASCII("ACAN CONFIGURED", MAIN_AREA);
+    digitalWrite(LED_YELLOW, HIGH);
+    printCANConfiguration(settings);
   }
   else
   {
-    digitalWrite(7, LOW);
-    Serial.print("Configuration error 0x");
-    Serial.println(errorCode, HEX);
-
-    displayASCII(F("ERROR"), HEADER_AREA);
-    displayASCII("0X" + String(errorCode, HEX), MAIN_AREA);
+    digitalWrite(LED_YELLOW, LOW);
+    printCANError(errorCode);
   }
 }
 
@@ -231,6 +170,42 @@ void printAvailableMem()
 {
   Serial.print("M: ");
   Serial.println(availableMemory());
+}
+
+void printCANConfiguration(const ACAN2515Settings &settings)
+{
+  Serial.print("Bit Rate prescaler: ");
+  Serial.println(settings.mBitRatePrescaler);
+  Serial.print("Propagation Segment: ");
+  Serial.println(settings.mPropagationSegment);
+  Serial.print("Phase segment 1: ");
+  Serial.println(settings.mPhaseSegment1);
+  Serial.print("Phase segment 2: ");
+  Serial.println(settings.mPhaseSegment2);
+  Serial.print("SJW: ");
+  Serial.println(settings.mSJW);
+  Serial.print("Triple Sampling: ");
+  Serial.println(settings.mTripleSampling ? "yes" : "no");
+  Serial.print("Actual bit rate: ");
+  Serial.print(settings.actualBitRate());
+  Serial.println(" bit/s");
+  Serial.print("Exact bit rate ? ");
+  Serial.println(settings.exactBitRate() ? "yes" : "no");
+  Serial.print("Sample point: ");
+  Serial.print(settings.samplePointFromBitStart());
+  Serial.println("%");
+
+  displayASCII("ACAN CONFIGURED", MAIN_AREA);
+}
+
+void printCANError(uint16_t errorCode)
+{
+  Serial.print(F("Configuration error 0x"));
+  Serial.println(errorCode, HEX);
+
+  char errorText[20];
+  snprintf(errorText, sizeof(errorText), "ERROR 0x%X", errorCode);
+  displayASCII(errorText, MAIN_AREA);
 }
 
 void updateFooterWithFreeMem()
