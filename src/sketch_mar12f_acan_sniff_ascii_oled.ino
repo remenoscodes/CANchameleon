@@ -5,18 +5,11 @@
 #include <SSD1306Ascii.h>
 #include <SSD1306AsciiWire.h>
 
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET -1       // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_WIDTH 128    // OLED display width, in pixels
+#define SCREEN_HEIGHT 64    // OLED display height, in pixels
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-#define SSD1306_MEMORYMODE 0x00
 
 SSD1306AsciiWire ascii;
-
-String headerAreaText = "";
-String mainAreaText = "";
 
 enum DisplayArea
 {
@@ -80,25 +73,14 @@ static uint32_t gSentFrameCount = 0;
 void setup()
 {
   //--- Start serial
-  Serial.begin(38400);
+  startSerial();
 
-  //--- Wait for serial (blink led at 10 Hz during waiting)
-  while (!Serial)
-  {
-    delay(50);
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  }
   SPI.begin();
 
   Serial.println("BEFORE PINs");
   printAvailableMem();
 
-  //--- Switch on builtin led
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-
-  pinMode(4, OUTPUT); // Blue Led
-  pinMode(7, OUTPUT); // Blue Led
+  initializeGPIOs();
 
   Serial.println("BEFORE ASCII");
   printAvailableMem();
@@ -106,16 +88,20 @@ void setup()
 
   Serial.println("BEFORE ACAN");
   printAvailableMem();
-  setupAcan();
+  initializeCAN();
 
   Serial.println("AFTER ACAN ASCII");
   printAvailableMem();
-
   updateFooterWithFreeMem();
 }
 
 void loop()
 {
+  if (somethingChangedThatAffectsMemory())
+  {
+    updateFooterWithFreeMem();
+  }
+
   CANMessage message;
   if (can.available())
   {
@@ -144,7 +130,44 @@ void loop()
   // updateFooterWithFreeMem();
 }
 
-void setupAcan()
+bool somethingChangedThatAffectsMemory()
+{
+  return true;
+}
+
+void initializeGPIOs()
+{
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  pinMode(4, OUTPUT); // Blue LED
+  pinMode(7, OUTPUT); // Red LED
+}
+
+void startSerial()
+{
+  Serial.begin(38400);
+  while (!Serial)
+  {
+    delay(50);
+    toggleBuiltinLED();
+  }
+}
+
+void toggleBuiltinLED()
+{
+  static unsigned long lastToggleTimestamp = 0;
+  const long interval = 100; // Interval at which to blink (milliseconds)
+
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastToggleTimestamp >= interval)
+  {
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    lastToggleTimestamp = currentMillis;
+  }
+}
+
+void initializeCAN()
 {
   displayASCII(F("CAN Sniffer"), HEADER_AREA);
   displayASCII(F("ACAN2515 SETUP"), MAIN_AREA);
@@ -212,19 +235,20 @@ void printAvailableMem()
 
 void updateFooterWithFreeMem()
 {
+  char footerText[24]; // Buffer should be big enough to hold the footer text
   int freeMem = availableMemory();
-  String footerText = "Free Mem: " + String(freeMem) + " ";
+  snprintf(footerText, sizeof(footerText), "Free Mem: %d ", freeMem);
   displayASCII(footerText, FOOTER_AREA); // Print to footer area
 }
 
 void setupASCII()
 {
   Wire.begin();
-  ascii.begin(&Adafruit128x64, 0x3C); // Replace Adafruit128x64 with your display type and 0x3C with your display's I2C address
+  ascii.begin(&Adafruit128x64, SCREEN_ADDRESS); // Replace Adafruit128x64 with your display type and 0x3C with your display's I2C address
   ascii.clear();
 
   // Set the cursor position to start writing from the first column of the first row
-  ascii.setCursor(10, 20);
+  ascii.setCursor(0, 0);
   ascii.setFont(System5x7);
 }
 
@@ -266,4 +290,10 @@ void displayASCII(const String &text, DisplayArea area)
     ascii.println(text);
     break;
   }
+}
+
+void printSerial(const char *message, int value)
+{
+  Serial.print(message);
+  Serial.println(value);
 }
