@@ -45,8 +45,17 @@ constexpr byte MCP2515_INT = 2;        // INT output of MCP2515 (adapt to your d
 ACAN2515 can(MCP2515_CS, SPI, MCP2515_INT);
 constexpr uint32_t QUARTZ_FREQUENCY = 8UL * 1000UL * 1000UL; // 8 MHz
 
-constexpr int LED_BLUE = 4;   // Blue LED pin
-constexpr int LED_YELLOW = 7; // Yellow LED pin
+constexpr int LED_YELLOW = A0; // Yellow LED pin
+constexpr int LED_BLUE = A1;   // Blue LED pin
+constexpr int LED_GREEN = A2;  // Builtin LED pin
+
+constexpr int LED_GREEN_MODE = 5;
+constexpr int LED_BLUE_MODE = 6;
+
+#define SNIFFER_MODE 0
+#define INJECTOR_SIM_MODE 1
+uint8_t OPERATION_MODE = SNIFFER_MODE; // 0 sniffer 1 injector
+#define TOGGLE_OPERATION_MODE_BUTTON_PIN 3
 
 // ——————————————————————————————————————————————————————————————————————————————
 
@@ -80,6 +89,7 @@ void setup()
   updateFooterWithFreeMem();
   displayCurrentGroup();
   updateCANIDsCountDisplay();
+  updateOperationModeDisplay();
 }
 
 void loop()
@@ -87,6 +97,12 @@ void loop()
   static unsigned long lastDebounceTime1 = 0;
   static unsigned long lastDebounceTime2 = 0;
   unsigned long debounceDelay = 50; // Debounce delay in milliseconds
+
+  if (digitalRead(TOGGLE_OPERATION_MODE_BUTTON_PIN) == LOW && (millis() - lastDebounceTime1) > debounceDelay)
+  {
+    lastDebounceTime1 = millis();
+    toggleOperationMode();
+  }
 
   // Group selection
   if (digitalRead(GROUP_1_BUTTON_PIN) == LOW && (millis() - lastDebounceTime1) > debounceDelay)
@@ -105,6 +121,11 @@ void loop()
     printSerial("Group selected", selectedGroup);
     displayCurrentGroup();
     updateCANIDsCountDisplay();
+  }
+
+  if (OPERATION_MODE == INJECTOR_SIM_MODE)
+  {
+    sendCANId();
   }
 
   CANMessage message;
@@ -127,6 +148,26 @@ void loop()
 bool somethingChangedThatAffectsMemory()
 {
   return true;
+}
+
+void toggleOperationMode()
+{
+  OPERATION_MODE = OPERATION_MODE == 0 ? 1 : 0;
+  updateOperationModeDisplay();
+}
+
+void updateOperationModeDisplay()
+{
+  if (OPERATION_MODE == SNIFFER_MODE)
+  {
+    digitalWrite(LED_GREEN_MODE, LOW);
+    digitalWrite(LED_BLUE_MODE, HIGH);
+  }
+  else if (OPERATION_MODE == INJECTOR_SIM_MODE)
+  {
+    digitalWrite(LED_GREEN_MODE, HIGH);
+    digitalWrite(LED_BLUE_MODE, LOW);
+  }
 }
 
 void displayCurrentGroup()
@@ -253,9 +294,13 @@ void initializeGPIOs()
   digitalWrite(LED_BUILTIN, HIGH);
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_YELLOW, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_GREEN_MODE, OUTPUT);
+  pinMode(LED_BLUE_MODE, OUTPUT);
 
   pinMode(GROUP_1_BUTTON_PIN, INPUT_PULLUP);
   pinMode(GROUP_2_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(TOGGLE_OPERATION_MODE_BUTTON_PIN, INPUT_PULLUP);
 }
 
 void startSerial()
@@ -440,4 +485,28 @@ void printSerial(const char *message, int value)
 {
   Serial.print(message);
   Serial.println(value);
+}
+
+void sendCANId()
+{
+  static uint32_t lastSendTime = 0;
+  if (millis() - lastSendTime > 100)
+  {
+    lastSendTime = millis();
+
+    CANMessage frame;
+    frame.id = random(0x7FF); // Random standard ID
+    frame.len = 8;
+    for (int i = 0; i < frame.len; ++i)
+    {
+      frame.data[i] = i; // Example data
+    }
+
+    if (can.tryToSend(frame))
+    {
+      digitalWrite(LED_GREEN, HIGH); // Indicate send success
+      delay(10);                     // Short delay for LED indication
+      digitalWrite(LED_GREEN, LOW);
+    }
+  }
 }
