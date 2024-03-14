@@ -68,12 +68,12 @@ uint8_t numUniqueIDs = 0;
 uint8_t canIdBitmap[MEMORY_LIMIT] = {0}; // Bitmap for the active group
 uint8_t selectedGroup = -1;              // false for group 1, true for group 2
 
-#define NO_GROUP -1
-#define GROUP_1 0
-#define GROUP_2 1
+#define CAN_IDS_NO_RANGE -1
+#define CAN_IDS_RANGE_0 0
+#define CAN_IDS_RANGE_1 1
 
-#define GROUP_1_BUTTON_PIN 8 // Button to select group 1
-#define GROUP_2_BUTTON_PIN 9 // Button to select group 2
+#define CAN_IDS_RANGE_0_BUTTON_PIN 8 // Button to select group 1
+#define CAN_IDS_RANGE_1_BUTTON_PIN 9 // Button to select group 2
 
 void setup()
 {
@@ -84,12 +84,12 @@ void setup()
   printAvailableMem();
   setupASCII();
   printAvailableMem();
+  updateOperationModeDisplay();
   initializeCAN();
   printAvailableMem();
   updateFooterWithFreeMem();
-  displayCurrentGroup();
+  displayCurrentCANIDRange();
   updateCANIDsCountDisplay();
-  updateOperationModeDisplay();
 }
 
 void loop()
@@ -105,21 +105,21 @@ void loop()
   }
 
   // Group selection
-  if (digitalRead(GROUP_1_BUTTON_PIN) == LOW && (millis() - lastDebounceTime1) > debounceDelay)
+  if (digitalRead(CAN_IDS_RANGE_0_BUTTON_PIN) == LOW && (millis() - lastDebounceTime1) > debounceDelay)
   {
-    selectedGroup = selectedGroup == GROUP_1 ? NO_GROUP : 0;
+    selectedGroup = selectedGroup == CAN_IDS_RANGE_0 ? CAN_IDS_NO_RANGE : 0;
     lastDebounceTime1 = millis();
     printSerial("Group selected", selectedGroup);
-    displayCurrentGroup();
+    displayCurrentCANIDRange();
     updateCANIDsCountDisplay();
   }
 
-  if (digitalRead(GROUP_2_BUTTON_PIN) == LOW && (millis() - lastDebounceTime2) > debounceDelay)
+  if (digitalRead(CAN_IDS_RANGE_1_BUTTON_PIN) == LOW && (millis() - lastDebounceTime2) > debounceDelay)
   {
-    selectedGroup = selectedGroup == GROUP_2 ? NO_GROUP : 1; // Select group 1
+    selectedGroup = selectedGroup == CAN_IDS_RANGE_1 ? CAN_IDS_NO_RANGE : 1; // Select group 1
     lastDebounceTime2 = millis();
     printSerial("Group selected", selectedGroup);
-    displayCurrentGroup();
+    displayCurrentCANIDRange();
     updateCANIDsCountDisplay();
   }
 
@@ -160,29 +160,31 @@ void updateOperationModeDisplay()
 {
   if (OPERATION_MODE == SNIFFER_MODE)
   {
+    displayASCII("CAN: SNIFFER", HEADER_AREA);
     digitalWrite(LED_INJECTOR_SIM_MODE, LOW);
     digitalWrite(LED_SNIFFER_MODE, HIGH);
   }
   else if (OPERATION_MODE == INJECTOR_SIM_MODE)
   {
+    displayASCII("CAN: INJECTOR_SIM", HEADER_AREA);
     digitalWrite(LED_INJECTOR_SIM_MODE, HIGH);
     digitalWrite(LED_SNIFFER_MODE, LOW);
   }
 }
 
-void displayCurrentGroup()
+void displayCurrentCANIDRange()
 {
-  if (selectedGroup == GROUP_1)
+  if (selectedGroup == CAN_IDS_RANGE_0)
   {
-    displayASCII("GROUP 1: 0 -> 1023", MAIN_AREA);
+    displayASCII("RANGE 0: 0..1023", MAIN_AREA);
   }
-  else if (selectedGroup == GROUP_2)
+  else if (selectedGroup == CAN_IDS_RANGE_1)
   {
-    displayASCII("GROUP 2: 1024 -> 2047", MAIN_AREA);
+    displayASCII("RANGE 1: 1024..2047", MAIN_AREA);
   }
   else
   {
-    displayASCII("NO GROUP", MAIN_AREA);
+    displayASCII("RANGE: NONE", MAIN_AREA);
   }
 }
 
@@ -195,13 +197,13 @@ void updateCANIDsCountDisplay()
 
 void setCanId(uint16_t canId)
 {
-  if (selectedGroup == NO_GROUP)
+  if (selectedGroup == CAN_IDS_NO_RANGE)
   {
     return;
   }
 
-  uint16_t rangeStart = selectedGroup == GROUP_1 ? 0 : 1024;
-  uint16_t rangeEnd = selectedGroup == GROUP_1 ? 1023 : 2047;
+  uint16_t rangeStart = selectedGroup == CAN_IDS_RANGE_0 ? 0 : 1024;
+  uint16_t rangeEnd = selectedGroup == CAN_IDS_RANGE_0 ? 1023 : 2047;
   if (canId >= rangeStart && canId <= rangeEnd)
   {
     uint16_t adjustedId = canId - rangeStart; // Adjust CAN ID to start from 0 within each group
@@ -212,13 +214,13 @@ void setCanId(uint16_t canId)
 
 bool isCanIdSet(uint16_t canId)
 {
-  if (selectedGroup == NO_GROUP)
+  if (selectedGroup == CAN_IDS_NO_RANGE)
   {
     return true;
   }
 
-  uint16_t rangeStart = selectedGroup == GROUP_1 ? 0 : 1024;
-  uint16_t rangeEnd = selectedGroup == GROUP_1 ? 1023 : 2047;
+  uint16_t rangeStart = selectedGroup == CAN_IDS_RANGE_0 ? 0 : 1024;
+  uint16_t rangeEnd = selectedGroup == CAN_IDS_RANGE_0 ? 1023 : 2047;
   if (canId >= rangeStart && canId <= rangeEnd)
   {
     uint16_t adjustedId = canId - rangeStart; // Adjust CAN ID to start from 0 within each group
@@ -269,8 +271,8 @@ void handleReceivedMessage(const CANMessage &message)
 {
   digitalWrite(LED_CAN_RECEIVING, HIGH);
 
-  char mIdBuff[10];
-  sprintf(mIdBuff, "ID Ox%x", message.id);
+  char mIdBuff[12];
+  sprintf(mIdBuff, "CAN ID Ox%x", message.id);
 
   displayASCII(mIdBuff, MAIN_AREA1);
 
@@ -283,7 +285,6 @@ void handleReceivedMessage(const CANMessage &message)
   //   Serial.print(message.data[i], HEX);
   //   Serial.print(" ");
   // }
-  Serial.println();
 
   digitalWrite(LED_CAN_RECEIVING, LOW);
 }
@@ -298,8 +299,8 @@ void initializeGPIOs()
   pinMode(LED_SNIFFER_MODE, OUTPUT);
   pinMode(LED_INJECTOR_SIM_MODE, OUTPUT);
 
-  pinMode(GROUP_1_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(GROUP_2_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(CAN_IDS_RANGE_0_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(CAN_IDS_RANGE_1_BUTTON_PIN, INPUT_PULLUP);
   pinMode(TOGGLE_OPERATION_MODE_BUTTON_PIN, INPUT_PULLUP);
 }
 
@@ -327,8 +328,7 @@ void toggleBuiltinLED()
 
 void initializeCAN()
 {
-  displayASCII(F("CAN Sniffer"), HEADER_AREA);
-  displayASCII(F("ACAN2515 SETUP"), MAIN_AREA);
+  displayASCII(F("CAN READY!"), MAIN_AREA);
 
   // CAN bitrate 500 kb/s worked -> ELANTRA, TUCSON
   // ACAN2515Settings settings(QUARTZ_FREQUENCY, 500UL * 1000UL);
