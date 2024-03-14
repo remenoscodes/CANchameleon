@@ -79,6 +79,7 @@ void setup()
   printAvailableMem();
   updateFooterWithFreeMem();
   displayCurrentGroup();
+  updateCANIDsCountDisplay();
 }
 
 void loop()
@@ -92,16 +93,18 @@ void loop()
   {
     selectedGroup = selectedGroup == GROUP_1 ? NO_GROUP : 0;
     lastDebounceTime1 = millis();
-    printSerial("Group selected", 0);
+    printSerial("Group selected", selectedGroup);
     displayCurrentGroup();
+    updateCANIDsCountDisplay();
   }
 
   if (digitalRead(GROUP_2_BUTTON_PIN) == LOW && (millis() - lastDebounceTime2) > debounceDelay)
   {
     selectedGroup = selectedGroup == GROUP_2 ? NO_GROUP : 1; // Select group 1
     lastDebounceTime2 = millis();
-    printSerial("Group selected", 1);
+    printSerial("Group selected", selectedGroup);
     displayCurrentGroup();
+    updateCANIDsCountDisplay();
   }
 
   CANMessage message;
@@ -142,6 +145,13 @@ void displayCurrentGroup()
   }
 }
 
+void updateCANIDsCountDisplay()
+{
+  // uint16_t count = countSetBits();
+  // String message =
+  // displayASCII("GROUP: " + String(selectedGroup) + " CAN IDs: " + String(countSetBits()), MAIN_AREA);
+}
+
 void setCanId(uint16_t canId)
 {
   if (selectedGroup == NO_GROUP)
@@ -155,6 +165,7 @@ void setCanId(uint16_t canId)
   {
     uint16_t adjustedId = canId - rangeStart; // Adjust CAN ID to start from 0 within each group
     canIdBitmap[adjustedId / 8] |= (1 << (adjustedId % 8));
+    updateCANIDsCountDisplay();
   }
 }
 
@@ -173,6 +184,19 @@ bool isCanIdSet(uint16_t canId)
     return canIdBitmap[adjustedId / 8] & (1 << (adjustedId % 8));
   }
   return false;
+}
+
+uint16_t countSetBits()
+{
+  uint16_t count = 0;
+  for (uint16_t i = 0; i < MEMORY_LIMIT * 8; ++i)
+  {
+    if (canIdBitmap[i / 8] & (1 << (i % 8)))
+    {
+      ++count;
+    }
+  }
+  return count;
 }
 
 void storeUniqueID(uint32_t id)
@@ -395,26 +419,14 @@ void displayASCII(const String &text, DisplayArea area)
     ascii.println(text); // Print new text
     break;
   case MAIN_AREA2:
-    // Calculate previous text length in pixels for main area
-    // previousTextLengthPixels = mainAreaText.length() * charWidthIncludingSpace;
-    // Set cursor to start position of main area
     ascii.setCursor(0, 4); // Assuming row 4 for main area, adjust if needed
     ascii.clearToEOL();    // Clear the line
-    // Optionally, clear more based on previous text length if necessary
-    // This is a placeholder, actual clearing might need custom implementation
-    // mainAreaText = text; // Update stored main text
-    ascii.println(text); // Print new text
+    ascii.println(text);   // Print new text
     break;
   case MAIN_AREA3:
-    // Calculate previous text length in pixels for main area
-    // previousTextLengthPixels = mainAreaText.length() * charWidthIncludingSpace;
-    // Set cursor to start position of main area
     ascii.setCursor(0, 5); // Assuming row 4 for main area, adjust if needed
     ascii.clearToEOL();    // Clear the line
-    // Optionally, clear more based on previous text length if necessary
-    // This is a placeholder, actual clearing might need custom implementation
-    // mainAreaText = text; // Update stored main text
-    ascii.println(text); // Print new text
+    ascii.println(text);   // Print new text
     break;
   case FOOTER_AREA:
     ascii.setCursor(0, 7); // Assuming last row for footer
