@@ -45,12 +45,12 @@ constexpr byte MCP2515_INT = 2;        // INT output of MCP2515 (adapt to your d
 ACAN2515 can(MCP2515_CS, SPI, MCP2515_INT);
 constexpr uint32_t QUARTZ_FREQUENCY = 8UL * 1000UL * 1000UL; // 8 MHz
 
-constexpr int LED_YELLOW = A0; // Yellow LED pin
-constexpr int LED_BLUE = A1;   // Blue LED pin
-constexpr int LED_GREEN = A2;  // Builtin LED pin
+constexpr int LED_CAN_READY = A0;     // Yellow LED pin
+constexpr int LED_CAN_RECEIVING = A1; // Blue LED pin
+constexpr int LED_CAN_SENDING = A2;   // Builtin LED pin
 
-constexpr int LED_GREEN_MODE = 5;
-constexpr int LED_BLUE_MODE = 6;
+constexpr int LED_INJECTOR_SIM_MODE = 5; // Red LED
+constexpr int LED_SNIFFER_MODE = 6;      // Blue LED
 
 #define SNIFFER_MODE 0
 #define INJECTOR_SIM_MODE 1
@@ -160,13 +160,13 @@ void updateOperationModeDisplay()
 {
   if (OPERATION_MODE == SNIFFER_MODE)
   {
-    digitalWrite(LED_GREEN_MODE, LOW);
-    digitalWrite(LED_BLUE_MODE, HIGH);
+    digitalWrite(LED_INJECTOR_SIM_MODE, LOW);
+    digitalWrite(LED_SNIFFER_MODE, HIGH);
   }
   else if (OPERATION_MODE == INJECTOR_SIM_MODE)
   {
-    digitalWrite(LED_GREEN_MODE, HIGH);
-    digitalWrite(LED_BLUE_MODE, LOW);
+    digitalWrite(LED_INJECTOR_SIM_MODE, HIGH);
+    digitalWrite(LED_SNIFFER_MODE, LOW);
   }
 }
 
@@ -267,7 +267,7 @@ void storeUniqueID(uint32_t id)
 
 void handleReceivedMessage(const CANMessage &message)
 {
-  digitalWrite(LED_BLUE, HIGH);
+  digitalWrite(LED_CAN_RECEIVING, HIGH);
 
   char mIdBuff[10];
   sprintf(mIdBuff, "ID Ox%x", message.id);
@@ -285,18 +285,18 @@ void handleReceivedMessage(const CANMessage &message)
   // }
   Serial.println();
 
-  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_CAN_RECEIVING, LOW);
 }
 
 void initializeGPIOs()
 {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-  pinMode(LED_BLUE, OUTPUT);
-  pinMode(LED_YELLOW, OUTPUT);
-  pinMode(LED_GREEN, OUTPUT);
-  pinMode(LED_GREEN_MODE, OUTPUT);
-  pinMode(LED_BLUE_MODE, OUTPUT);
+  pinMode(LED_CAN_RECEIVING, OUTPUT);
+  pinMode(LED_CAN_READY, OUTPUT);
+  pinMode(LED_CAN_SENDING, OUTPUT);
+  pinMode(LED_SNIFFER_MODE, OUTPUT);
+  pinMode(LED_INJECTOR_SIM_MODE, OUTPUT);
 
   pinMode(GROUP_1_BUTTON_PIN, INPUT_PULLUP);
   pinMode(GROUP_2_BUTTON_PIN, INPUT_PULLUP);
@@ -340,12 +340,12 @@ void initializeCAN()
 
   if (errorCode == 0)
   {
-    digitalWrite(LED_YELLOW, HIGH);
+    digitalWrite(LED_CAN_READY, HIGH);
     printCANConfiguration(settings);
   }
   else
   {
-    digitalWrite(LED_YELLOW, LOW);
+    digitalWrite(LED_CAN_READY, LOW);
     printCANError(errorCode);
   }
 }
@@ -504,9 +504,9 @@ void sendCANId()
 
     if (can.tryToSend(frame))
     {
-      digitalWrite(LED_GREEN, HIGH); // Indicate send success
-      delay(10);                     // Short delay for LED indication
-      digitalWrite(LED_GREEN, LOW);
+      digitalWrite(LED_CAN_SENDING, HIGH); // Indicate send success
+      delay(10);                           // Short delay for LED indication
+      digitalWrite(LED_CAN_SENDING, LOW);
     }
   }
 }
